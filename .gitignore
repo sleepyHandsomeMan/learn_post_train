@@ -1,0 +1,32 @@
+# 模型文件（通常很大，不应提交到 git）
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 项目特定
+*.log
+*.tmp
+outputs/
+checkpoints/
+wandb/
