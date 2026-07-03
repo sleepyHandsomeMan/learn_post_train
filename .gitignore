@@ -5,6 +5,18 @@
 *.pth
 *.ckpt
 
+# 模型权重目录
+models/
+
+# 评估结果 jsonl/json（体积大，不提交）
+eval_results/
+
+# 训练产物临时目录
+post_training_framework/runs/
+
+# checkpoint 临时文件
+*-checkpoint.jsonl
+
 # Python
 __pycache__/
 *.py[cod]
@@ -19,7 +31,8 @@ __pycache__/
 *.swp
 *.swo
 *~
-
+.agents/
+.claude/
 # OS
 .DS_Store
 Thumbs.db
@@ -28,5 +41,4 @@ Thumbs.db
 *.log
 *.tmp
 outputs/
-checkpoints/
 wandb/

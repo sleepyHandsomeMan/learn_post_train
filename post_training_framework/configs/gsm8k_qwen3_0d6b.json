@@ -1,0 +1,63 @@
+{
+  "experiment_name": "gsm8k_qwen3_0d6b_len768_lr3e-5_ep1",
+  "workspace_root": "..",
+  "output_root": "post_training_framework/runs",
+  "model": {
+    "base_model_dir": "models/base/qwen3_0d6B"
+  },
+  "dataset": {
+    "name": "gsm8k_sft",
+    "train_file": "datasets/gsm8k_sft/train.parquet",
+    "eval_file": "datasets/gsm8k_sft/eval_20.parquet",
+    "max_eval_items": 20
+  },
+  "prompt": {
+    "format_instruction": "Let's think step by step and output the final answer after \"####\".",
+    "include_format_instruction": true,
+    "base_prompt_mode": "plain",
+    "base_enable_thinking": null,
+    "sft_prompt_mode": "chat",
+    "sft_enable_thinking": false
+  },
+  "generation": {
+    "max_new_tokens": 160,
+    "fp16": true,
+    "device_map": "auto"
+  },
+  "sft": {
+    "run_name": "qwen3_0d6b_gsm8k_lora_len768_lr3e-5_ep1",
+    "eval_adapter_dir": "models/sft/qwen3_0d6b_gsm8k_lora_len768_lr3e-5_ep1_run2",
+    "max_length": 768,
+    "learning_rate": 0.00003,
+    "num_train_epochs": 1.0,
+    "per_device_train_batch_size": 1,
+    "gradient_accumulation_steps": 16,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "warmup_ratio": 0.03,
+    "lr_scheduler_type": "cosine",
+    "max_grad_norm": 1.0,
+    "logging_steps": 20,
+    "save_strategy": "epoch",
+    "save_total_limit": 2,
+    "dataloader_num_workers": 0,
+    "optim": "adamw_torch",
+    "seed": 42,
+    "fp16": true,
+    "device_map": "auto",
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ]
+  },
+  "runs": {
+    "base_eval_name": "base",
+    "sft_eval_name": "sft_lora"
+  }
+}
