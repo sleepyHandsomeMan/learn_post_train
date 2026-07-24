@@ -116,6 +116,7 @@ Rule reward 阶段要回答的问题:
 - rollout -> reward -> update 是否真的跑通。
 - 规则奖励上升是否带来真实正确率提升。
 - 模型是否开始钻规则漏洞。
+- SFT 模型采样空间里是否已经存在正确答案，即 GRPO 是否有可强化的正确轨迹。
 
 建议记录指标:
 
@@ -127,6 +128,32 @@ Rule reward 阶段要回答的问题:
 | avg length | 检查长度偏置 | 回答越来越长 |
 | KL | 观察 actor 是否偏离 reference | KL 快速增大 |
 | entropy | 观察探索是否塌缩 | entropy 过快下降 |
+
+#### SFT oracle@k 诊断
+
+`SFT oracle@k` 用于判断 GRPO 之前的 SFT 模型是否“会但不稳定”。做法是对同一道验证题从 SFT 模型采样 `k` 个回答，只要其中任意一个回答 exact match，就把这道题记为 oracle correct。
+
+它不是线上能力指标，因为真实推理时不会有人替模型从 8 个答案里挑正确答案。它是 GRPO 前的诊断指标，用来回答:
+
+```text
+当前 SFT 策略分布里，是否已经包含正确答案？
+```
+
+判读方式:
+
+| 结果 | 含义 | 下一步 |
+|---|---|---|
+| greedy EM 约 47%，oracle@8 明显更高，例如 60%+ | 模型会做一部分题，但正确轨迹概率不够高 | 继续调 GRPO，优先增加 rollout_n、温度和有效更新强度 |
+| greedy EM 约 47%，oracle@8 只有 50% 左右 | 多采样也找不到多少正确答案 | 当前 0.6B/SFT 分布里可强化轨迹少，优先改 SFT 数据或换更大模型 |
+| oracle@8 高但 GRPO 不升 | 不是能力硬上限，更像 GRPO 配置、reward 或训练稳定性问题 | 检查 rollout_n、temperature、lr、KL、reward 组成和验证集粒度 |
+
+对 GRPO 特别重要的原因:
+
+```text
+GRPO 依赖同一 prompt 的多条 rollout 做组内比较。
+如果采样里偶尔有正确答案，reward 才能把正确轨迹推高。
+如果采样全错，GRPO 只能在错误答案之间排序，很难凭空学会新解法。
+```
 
 ### 4.4 Reward Model 评估
 
@@ -306,7 +333,7 @@ RLHF 阶段要回答的问题:
 - 相关模型: Qwen3-0.6B、Qwen3-1.7B
 - 相关任务: GSM8K 数学问答
 - 相关现象: SFT 后模型会在 `#### final_answer` 后继续复读、输出乱码或多语言碎片。
-- 原始记录: `docs/sft_repeat_garble_fix_experience_cn.md`
+- 原始记录: `docs/21_sft_eos_repeat_fix_case_cn.md`
 
 #### 一句话结论
 
@@ -532,8 +559,8 @@ qwen3_1d7b_gsm8k_lora_len768_lr2e-5_ep1_eosfix2
 
 相关已有文档:
 
-- `docs/post_training_0_5b_practice_guide_cn.md`
-- `docs/sft_repeat_garble_fix_experience_cn.md`
+- `docs/10_learning_path_0p5b_post_training_cn.md`
+- `docs/21_sft_eos_repeat_fix_case_cn.md`
 - `eval_results/base_model/`
 - `eval_results/sft_model/`
 - `eval_results/rule_reward/`

@@ -24,7 +24,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-new-tokens", type=int, default=None, help="生成最大新 token 数。")
     parser.add_argument("--max-items", type=int, default=None, help="最多评估多少条样本。")
+    parser.add_argument("--eval-batch-size", type=int, default=1, help="评估推理 batch size；RTX 4070 12GB 可先试 8。")
     parser.add_argument("--run-name", type=str, default=None, help="本次评估产物名称。")
+    parser.add_argument("--output-dir", type=Path, default=None, help="评估结果输出目录。")
     parser.add_argument(
         "--set",
         dest="overrides",
@@ -44,7 +46,9 @@ def main() -> None:
         model_kind="base",
         max_new_tokens=args.max_new_tokens,
         max_items=args.max_items,
+        eval_batch_size=args.eval_batch_size,
         run_name=args.run_name,
+        output_dir=args.output_dir,
     )
 
 

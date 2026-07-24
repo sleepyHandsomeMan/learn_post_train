@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "suite_name": "g7fmt",
+  "description": "用完整eval100和扩大sample量复核C0/L1三seed的格式、截顶与sample EM，区分旧80条诊断的抽样波动和稳定退化。",
+  "config": "post_training_framework/configs/gsm8k_qwen3_0d6b_grpo_v7_causal_base_from169.json",
+  "output_root": "eval_results/grpo_model/g7fmt",
+  "python_executable": "D:/Anaconda/envs/test3/python.exe",
+  "sampling": {
+    "max_items": 100,
+    "max_response_tokens": 256,
+    "max_prompt_length": 512,
+    "eval_batch_size": 8,
+    "return_sequences": 4,
+    "eval_seeds": [73001, 73002],
+    "temperature": 0.7,
+    "top_p": 1.0,
+    "top_k": 50,
+    "format_instruction": "Let's think step by step and output the final answer after \"####\".",
+    "enable_thinking": false
+  },
+  "thresholds": {
+    "confidence": 0.95,
+    "bootstrap_samples": 5000,
+    "bootstrap_seed": 73000,
+    "format_min": 0.9,
+    "hit_max_max": 0.1,
+    "format_delta_min": -0.01,
+    "hit_max_delta_max": 0.01,
+    "em_delta_min": -0.02,
+    "min_support_seeds": 2
+  },
+  "trials": [
+    {
+      "id": "s42_c0",
+      "variant": "c0",
+      "training_seed": 42,
+      "checkpoint": "models/grpo/grpo_v7_step169_causal_v1/c0_fresh_control/seed-42/checkpoint-49"
+    },
+    {
+      "id": "s42_l1",
+      "variant": "l1",
+      "training_seed": 42,
+      "checkpoint": "models/grpo/grpo_v7_step169_causal_v1/l1_lr3e6/seed-42/checkpoint-49"
+    },
+    {
+      "id": "s123_c0",
+      "variant": "c0",
+      "training_seed": 123,
+      "checkpoint": "models/grpo/grpo_v7_step169_causal_v1/c0_fresh_control/seed-123/checkpoint-49"
+    },
+    {
+      "id": "s123_l1",
+      "variant": "l1",
+      "training_seed": 123,
+      "checkpoint": "models/grpo/grpo_v7_step169_causal_v1/l1_lr3e6/seed-123/checkpoint-49"
+    },
+    {
+      "id": "s26_c0",
+      "variant": "c0",
+      "training_seed": 2026,
+      "checkpoint": "models/grpo/g7s26/c0_fresh_control/seed-2026/checkpoint-49"
+    },
+    {
+      "id": "s26_l1",
+      "variant": "l1",
+      "training_seed": 2026,
+      "checkpoint": "models/grpo/g7s26/l1_lr3e6/seed-2026/checkpoint-49"
+    }
+  ]
+}
+

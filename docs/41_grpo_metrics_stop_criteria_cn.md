@@ -36,7 +36,7 @@
 每 eval_freq 步输出：
 
 ```
-[eval step 9] reward=0.250 em=0.300 fmt=0.400 len=107
+[eval step 9] reward=0.250 em=0.300 fmt=0.400 len=107 max_tokens_reached_without_eos=0.020 eos=0.980
 ```
 
 逐项含义：
@@ -47,6 +47,10 @@
 | `em` | 验证集 exact_match (答案完全正确) | **最重要的指标** | 下降或不升 → 训练无效或 hacking |
 | `fmt` | 验证集 format_rate (含 #### 且格式正确) | >0.5 | <0.1 → 格式退化 → 训练终止 |
 | `len` | 验证集平均回答长度 | 稳定 | 突然变长 → 可能重复; 突然变短 → 可能跳过推理 |
+| `max_tokens_reached_without_eos` | 达到 `max_response_length` 且没有 EOS 的回答比例 | 接近 0 | 持续上升 → 越来越多回答被生成上限终止 |
+| `eos` | 正常生成 EOS 的回答比例 | 接近 1 | 持续下降 → 停止行为退化 |
+
+CSV 和看板按评估来源使用完整字段名：训练 rollout 为 `rollout_max_tokens_reached_without_eos_rate`，greedy 验证为 `val_max_tokens_reached_without_eos_rate`，随机验证为 `val_sample_max_tokens_reached_without_eos_rate`。该指标不能单独证明答案内容被截断，还要结合格式、答案位置和原始回答判断。
 
 ### 1.3 显存日志
 
@@ -230,6 +234,22 @@ python post_training_framework/scripts/run_grpo_train.py \
 ## 6. GRPO 无效果的排查方法
 
 当 GRPO 训练连续多步不改善 val_em 时，需要逐层排查信号链路：
+
+### 6.0 先跑 SFT oracle@8
+
+在继续调 GRPO 前，先确认 SFT 模型采样空间里是否已经存在正确答案：
+
+```text
+SFT oracle@8 = 同一道题采样 8 个回答，只要有 1 个 exact match 就算这道题成功
+```
+
+这个指标不是最终上线能力，而是判断 GRPO 是否有可学信号：
+
+| 现象 | 判断 | 动作 |
+|---|---|---|
+| greedy EM 低，但 oracle@8 明显高 | SFT 会但不稳定，GRPO 有空间 | 增大 rollout_n、提高采样温度、检查 lr/KL |
+| greedy EM 和 oracle@8 接近 | 正确轨迹很少，GRPO 很难提升 | 优先改 SFT 数据、换更大模型或做错题分析 |
+| oracle@8 高，GRPO 仍不升 | 训练设定或 reward 设计问题 | 看 reward 组成、advantage 方差、approx_kl、clip_frac |
 
 ### 6.1 信号链路：从 rollout 到梯度
 
@@ -473,18 +493,8 @@ models/grpo/qwen3_0d6b_gsm8k_rule_reward/logs/grpo_0d6b_500steps.log
 - 包含所有显存详细诊断 (DEBUG 级别)
 - 格式: `时间 | 级别 | 内容`
 
-可以用 grep 快速查找关键信息:
+PowerShell 可用一条命令检索早停、验证、显存峰值和警告：
 
-```bash
-# 查看所有早停追踪
-grep "早停追踪" logs/*.log
-
-# 查看所有验证结果
-grep "eval step" logs/*.log
-
-# 查看显存峰值
-grep "峰值点" logs/*.log
-
-# 查看警告
-grep "WARNING" logs/*.log
+```powershell
+Select-String -Path logs\*.log -Pattern '早停追踪|eval step|峰值点|WARNING'
 ```

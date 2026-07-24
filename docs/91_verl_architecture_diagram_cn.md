@@ -1,6 +1,6 @@
 # verl 源码架构图解
 
-本文用一张总览图概括 `docs/verl_code_architecture_cn.md` 中的核心内容。图里的每个模块都对应 `D:\learnAI\verl\verl` 下的源码目录或关键类。
+本文用一张总览图概括 `docs/90_verl_source_code_map_cn.md` 中的核心内容。图里的每个模块都对应 `D:\learnAI\verl\verl` 下的源码目录或关键类。
 
 ## 总体架构图
 

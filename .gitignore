@@ -5,17 +5,47 @@
 *.pth
 *.ckpt
 
-# 模型权重目录
-models/
+# 模型权重目录：忽略内容，但保留目录说明
+models/**
+!models/
+!models/README.md
 
-# 评估结果 jsonl/json（体积大，不提交）
-eval_results/
+# 评估结果：忽略内容，但保留目录说明
+eval_results/**
+!eval_results/
+!eval_results/README.md
+
+# 长任务日志：忽略内容，但保留目录说明
+logs/**
+!logs/
+!logs/README.md
 
 # 训练产物临时目录
 post_training_framework/runs/
 
 # checkpoint 临时文件
 *-checkpoint.jsonl
+
+# 数据派生产物与大体积中间文件
+datasets/gsm8k_grpo/derived/**
+!datasets/gsm8k_grpo/derived/
+!datasets/gsm8k_grpo/derived/README.md
+datasets/gsm8k_grpo/audits/**
+!datasets/gsm8k_grpo/audits/
+!datasets/gsm8k_grpo/audits/README.md
+datasets/gsm8k_grpo/buckets_*/
+datasets/gsm8k_grpo/previews/
+datasets/gsm8k_grpo/train_full*.parquet
+datasets/gsm8k_grpo/train_full*.json
+datasets/gsm8k_grpo/train_full*_preview.md
+datasets/gsm8k_grpo/train_focus*.parquet
+datasets/gsm8k_grpo/train_focus*.json
+datasets/gsm8k_grpo/train_focus*.csv
+datasets/gsm8k_grpo/train_focus*.md
+datasets/gsm8k_grpo/overfit_probe_*.parquet
+datasets/gsm8k_grpo/overfit_probe_*.json
+datasets/gsm8k_grpo/*.verl.parquet
+datasets/gsm8k_grpo/*.verl.meta.json
 
 # Python
 __pycache__/
@@ -39,6 +69,8 @@ Thumbs.db
 
 # 项目特定
 *.log
+dashboard_*.log
 *.tmp
 outputs/
 wandb/
+models/.cell*_test.py

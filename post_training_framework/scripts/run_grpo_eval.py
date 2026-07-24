@@ -1,7 +1,8 @@
 """运行 GRPO 模型推理评估。
 
-GRPO checkpoint 由 train_grpo.py 直接保存为 HuggingFace 格式 (LoRA adapter)，
-可直接用于评估。
+支持两种输入：
+1. train_grpo.py 保存的 GRPO LoRA checkpoint；
+2. 已经 merge/export 后的完整 HuggingFace actor 目录。
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from ptf.reward import GSM8KRewardConfig, compute_gsm8k_rule_reward
 
 def parse_args() -> argparse.Namespace:
     """解析命令行参数。"""
-    parser = argparse.ArgumentParser(description="运行 merge 后 GRPO actor 的 GSM8K 评估。")
+    parser = argparse.ArgumentParser(description="运行 GRPO actor 的 GSM8K 评估。")
     parser.add_argument(
         "--config",
         type=Path,
@@ -34,7 +35,7 @@ def parse_args() -> argparse.Namespace:
         "--model-dir",
         type=Path,
         required=True,
-        help="merge/export 后的 GRPO HuggingFace 模型目录。",
+        help="GRPO LoRA checkpoint 目录，或 merge/export 后的完整 HuggingFace 模型目录。",
     )
     parser.add_argument(
         "--output-dir",
@@ -44,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-new-tokens", type=int, default=512, help="生成最大新 token 数。")
     parser.add_argument("--max-items", type=int, default=20, help="最多评估多少条样本。")
+    parser.add_argument("--eval-batch-size", type=int, default=1, help="评估推理 batch size；RTX 4070 12GB 可先试 8。")
     parser.add_argument("--run-name", type=str, required=True, help="本次 GRPO 评估名称。")
     parser.add_argument("--overlong-chars", type=int, default=1200, help="rule reward 中判定过长输出的字符阈值。")
     parser.add_argument(
@@ -160,6 +162,7 @@ def main() -> None:
         model_dir=args.model_dir,
         max_new_tokens=args.max_new_tokens,
         max_items=args.max_items,
+        eval_batch_size=args.eval_batch_size,
         run_name=args.run_name,
         output_dir=output_dir,
     )

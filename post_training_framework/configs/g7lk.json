@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "suite_name": "g7lk",
+  "description": "以三seed确认后的L1为共同基线，分别检验更低学习率L2和禁止KL系数降到初始值以下的K3。",
+  "base_train_config": "post_training_framework/configs/g7lk_base.json",
+  "source_checkpoint": "models/grpo/qwen3_0d6b_grpo_v7_full5759_rewardv2_rollout8_len256_lr5e-6_ppo2_eval100/checkpoint-169",
+  "output_root": "models/grpo/g7lk",
+  "python_executable": "D:/Anaconda/envs/test3/python.exe",
+  "default_seed": 42,
+  "control_variant_id": "l1",
+  "confirmation_seeds": [42, 123, 2026],
+  "phases": [
+    {
+      "id": "g10",
+      "target_steps": 10,
+      "parent": null,
+      "purpose": "工程与安全门禁；分别验证L2/K3的加载、日志、信号、KL和格式链路。"
+    },
+    {
+      "id": "s30",
+      "target_steps": 30,
+      "parent": "g10",
+      "purpose": "单变量Screen30；与既有seed42 L1轨迹比较KL、能力、rollout和格式。"
+    },
+    {
+      "id": "c50",
+      "target_steps": 50,
+      "parent": "s30",
+      "purpose": "仅对Screen30通过分支续跑Confirm50，并补做扩大sample评估。"
+    }
+  ],
+  "variants": [
+    {
+      "id": "l1",
+      "tier": "control",
+      "factor": "confirmed_l1",
+      "description": "已通过三seed和扩大sample确认的3e-6学习率控制组。",
+      "changed_keys": [],
+      "overrides": {}
+    },
+    {
+      "id": "l2",
+      "tier": "sensitivity",
+      "factor": "learning_rate_dose",
+      "description": "相对L1只把学习率从3e-6进一步降到2e-6，检验稳定性与学习速度的剂量关系。",
+      "changed_keys": ["learning_rate"],
+      "overrides": {
+        "learning_rate": 0.000002
+      }
+    },
+    {
+      "id": "k3",
+      "tier": "single",
+      "factor": "kl_min_floor",
+      "description": "相对L1只把adaptive_kl_min_coef从0.001提高到0.005，禁止控制器把约束降到初始值以下。",
+      "changed_keys": ["adaptive_kl_min_coef"],
+      "overrides": {
+        "adaptive_kl_min_coef": 0.005
+      }
+    }
+  ]
+}

@@ -34,6 +34,12 @@ def parse_args() -> argparse.Namespace:
         default=WORKSPACE_ROOT / "datasets" / "gsm8k_grpo",
         help="预览报告输出目录。",
     )
+    parser.add_argument(
+        "--output-file",
+        type=Path,
+        default=None,
+        help="预览 Markdown 输出文件；未指定时写入 output-dir/preview_rl_prompts.md。",
+    )
     parser.add_argument("--num-preview", type=int, default=5, help="预览样本数。")
     return parser.parse_args()
 
@@ -47,7 +53,8 @@ def main() -> None:
         num_preview=args.num_preview,
     )
 
-    preview_path = args.output_dir / "preview_rl_prompts.md"
+    preview_path = args.output_file or (args.output_dir / "preview_rl_prompts.md")
+    preview_path.parent.mkdir(parents=True, exist_ok=True)
     write_markdown(preview_path, report)
     print(f"预览报告已保存: {preview_path}")
     print(f"预览 {args.num_preview} 条样本, 源自: {args.sft_file}")

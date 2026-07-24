@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "suite_name": "grpo_v7_step169_causal_v1",
+  "description": "从 checkpoint-169 的同一 LoRA 权重出发，隔离旧 optimizer、PPO 重复轮数、学习率、KL 强度、KL 响应速度和独立 prompt 数。",
+  "base_train_config": "post_training_framework/configs/gsm8k_qwen3_0d6b_grpo_v7_causal_base_from169.json",
+  "source_checkpoint": "models/grpo/qwen3_0d6b_grpo_v7_full5759_rewardv2_rollout8_len256_lr5e-6_ppo2_eval100/checkpoint-169",
+  "output_root": "models/grpo/grpo_v7_step169_causal_v1",
+  "python_executable": "D:/Anaconda/envs/test3/python.exe",
+  "default_seed": 42,
+  "confirmation_seeds": [42, 123, 2026],
+  "phases": [
+    {
+      "id": "gate10",
+      "target_steps": 10,
+      "parent": null,
+      "purpose": "工程门禁：验证加载模式、显存、NaN、日志、格式和保护链路。"
+    },
+    {
+      "id": "screen30",
+      "target_steps": 30,
+      "parent": "gate10",
+      "purpose": "单变量筛选：观察 reference KL 斜率、rollout exact 与验证 EM。"
+    },
+    {
+      "id": "confirm50",
+      "target_steps": 50,
+      "parent": "screen30",
+      "purpose": "固定 seed 长程确认：排除只在前30步暂时稳定的配置。"
+    }
+  ],
+  "variants": [
+    {
+      "id": "c0_fresh_control",
+      "tier": "single",
+      "factor": "clean_control",
+      "description": "新目标、仅加载 LoRA、重置 optimizer 的干净对照。",
+      "changed_keys": [],
+      "overrides": {}
+    },
+    {
+      "id": "o1_old_optimizer",
+      "tier": "single",
+      "factor": "optimizer_history",
+      "description": "只继承 checkpoint-169 的旧 AdamW 状态；这是诊断污染的分支，不是候选正式配置。",
+      "changed_keys": ["resume_state_mode"],
+      "overrides": {
+        "resume_state_mode": "weights_and_optimizer"
+      }
+    },
+    {
+      "id": "p1_ppo_epoch1",
+      "tier": "single",
+      "factor": "rollout_reuse",
+      "description": "只把同一批 rollout 的 PPO 重用轮数从2降到1。",
+      "changed_keys": ["ppo_epochs"],
+      "overrides": {
+        "ppo_epochs": 1
+      }
+    },
+    {
+      "id": "l1_lr3e6",
+      "tier": "single",
+      "factor": "learning_rate",
+      "description": "只把学习率从5e-6降到3e-6。",
+      "changed_keys": ["learning_rate"],
+      "overrides": {
+        "learning_rate": 0.000003
+      }
+    },
+    {
+      "id": "l2_lr2e6",
+      "tier": "sensitivity",
+      "factor": "learning_rate",
+      "description": "学习率剂量复核：只把5e-6降到2e-6。",
+      "changed_keys": ["learning_rate"],
+      "overrides": {
+        "learning_rate": 0.000002
+      }
+    },
+    {
+      "id": "k1_kl_coef2e2",
+      "tier": "single",
+      "factor": "kl_strength",
+      "description": "只把初始 KL 系数从0.005提高到0.02。",
+      "changed_keys": ["kl_loss_coef"],
+      "overrides": {
+        "kl_loss_coef": 0.02
+      }
+    },
+    {
+      "id": "k2_kl_interval2",
+      "tier": "single",
+      "factor": "kl_latency",
+      "description": "只把自适应 KL 检查间隔从10步缩短到2步。",
+      "changed_keys": ["adaptive_kl_interval"],
+      "overrides": {
+        "adaptive_kl_interval": 2
+      }
+    },
+    {
+      "id": "b1_prompt8_accum2",
+      "tier": "single",
+      "factor": "prompt_diversity",
+      "description": "结构对照：独立 prompt 从4增到8，并累积2个 mini-batch，使每步 optimizer update 仍为4次。",
+      "changed_keys": ["train_batch_size", "gradient_accumulation_steps"],
+      "overrides": {
+        "train_batch_size": 8,
+        "gradient_accumulation_steps": 2
+      }
+    },
+    {
+      "id": "i1_ppo1_klfast",
+      "tier": "interaction",
+      "factor": "rollout_reuse_x_kl_latency",
+      "description": "仅在单变量结果支持后运行，检查 PPO 重用与 KL 滞后的交互。",
+      "changed_keys": ["ppo_epochs", "adaptive_kl_interval"],
+      "overrides": {
+        "ppo_epochs": 1,
+        "adaptive_kl_interval": 2
+      }
+    },
+    {
+      "id": "i2_lr3e6_klfast",
+      "tier": "interaction",
+      "factor": "learning_rate_x_kl_latency",
+      "description": "仅在单变量结果支持后运行，检查步幅与 KL 滞后的交互。",
+      "changed_keys": ["learning_rate", "adaptive_kl_interval"],
+      "overrides": {
+        "learning_rate": 0.000003,
+        "adaptive_kl_interval": 2
+      }
+    },
+    {
+      "id": "i3_ppo1_prompt8_accum2",
+      "tier": "interaction",
+      "factor": "rollout_reuse_x_prompt_diversity",
+      "description": "仅在单变量结果支持后运行，检查小批次方差与重复更新的交互。",
+      "changed_keys": ["ppo_epochs", "train_batch_size", "gradient_accumulation_steps"],
+      "overrides": {
+        "ppo_epochs": 1,
+        "train_batch_size": 8,
+        "gradient_accumulation_steps": 2
+      }
+    }
+  ]
+}

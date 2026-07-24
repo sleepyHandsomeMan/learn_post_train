@@ -21,14 +21,17 @@ class GSM8KRewardConfig:
     """GSM8K rule reward 的权重配置。"""
 
     exact_with_format_score: float = 1.0
-    exact_without_format_score: float = 0.5
-    format_bonus: float = 0.2
-    single_final_bonus: float = 0.1
+    exact_without_format_score: float = 0.1
+    format_bonus: float = 0.1
+    single_final_bonus: float = 0.05
     missing_format_penalty: float = -0.2
-    multi_final_penalty: float = -0.1
+    multi_final_penalty: float = -0.2
     repeat_penalty: float = -0.4
     overlong_penalty: float = -0.2
     overlong_chars: int = 1200
+    long_response_token_threshold: int = 192
+    long_response_penalty: float = -0.1
+    truncated_response_penalty: float = -0.3
     min_reward: float = -1.0
     max_reward: float = 1.3
 
@@ -42,6 +45,9 @@ def compute_gsm8k_rule_reward(
     response: str,
     gold_answer: str | None,
     config: GSM8KRewardConfig | None = None,
+    response_token_count: int | None = None,
+    max_response_tokens: int | None = None,
+    terminated_by_eos: bool | None = None,
 ) -> dict[str, Any]:
     """计算单条 GSM8K response 的规则奖励。
 
@@ -53,22 +59,34 @@ def compute_gsm8k_rule_reward(
     config = config or GSM8KRewardConfig()
     response = str(response)
 
+    repetition = summarize_repetition(response)
     first_hash_answer = extract_first_hash_answer(response)
     fallback_answer = extract_final_answer(response)
-    format_ok = first_hash_answer is not None
-    pred_answer = first_hash_answer if format_ok else fallback_answer
+    has_hash_format = first_hash_answer is not None
+    single_final_answer_ok = repetition["hash_count"] == 1 and repetition["final_answer_count"] == 1
+    format_ok = has_hash_format and single_final_answer_ok
+    pred_answer = first_hash_answer if has_hash_format else fallback_answer
 
     exact_match = answers_equal(pred_answer, gold_answer)
     first_hash_exact_match = answers_equal(first_hash_answer, gold_answer)
     fallback_exact_match = answers_equal(fallback_answer, gold_answer)
-    repetition = summarize_repetition(response)
-    single_final_answer_ok = repetition["hash_count"] == 1 and repetition["final_answer_count"] == 1
-    overlong = len(response) > config.overlong_chars
+    token_overlong = (
+        response_token_count is not None
+        and response_token_count >= config.long_response_token_threshold
+    )
+    char_overlong = len(response) > config.overlong_chars
+    overlong = char_overlong or token_overlong
+    truncated = (
+        response_token_count is not None
+        and max_response_tokens is not None
+        and response_token_count >= max_response_tokens
+        and terminated_by_eos is False
+    )
 
     reward = 0.0
     components: dict[str, float] = {}
 
-    if first_hash_exact_match:
+    if format_ok and first_hash_exact_match:
         components["answer"] = config.exact_with_format_score
     elif (not format_ok) and fallback_exact_match:
         components["answer"] = config.exact_without_format_score
@@ -88,7 +106,9 @@ def compute_gsm8k_rule_reward(
         components["single_final"] = 0.0
 
     components["repeat"] = config.repeat_penalty if repetition["repeat_like"] else 0.0
-    components["overlong"] = config.overlong_penalty if overlong else 0.0
+    components["overlong"] = config.overlong_penalty if char_overlong else 0.0
+    components["length"] = config.long_response_penalty if token_overlong else 0.0
+    components["truncated"] = config.truncated_response_penalty if truncated else 0.0
 
     reward = sum(components.values())
     clipped_reward = _clip(reward, config.min_reward, config.max_reward)
@@ -104,6 +124,7 @@ def compute_gsm8k_rule_reward(
         "exact_match": exact_match,
         "first_hash_exact_match": first_hash_exact_match,
         "fallback_exact_match": fallback_exact_match,
+        "has_hash_format": has_hash_format,
         "format_ok": format_ok,
         "single_final_answer_ok": single_final_answer_ok,
         "repeat_like": repetition["repeat_like"],
@@ -112,8 +133,11 @@ def compute_gsm8k_rule_reward(
         "answer_is_count": repetition["answer_is_count"],
         "repeated_line_count": repetition["repeated_line_count"],
         "overlong": overlong,
+        "token_overlong": token_overlong,
+        "truncated": truncated,
+        "response_token_count": response_token_count,
+        "max_response_tokens": max_response_tokens,
+        "terminated_by_eos": terminated_by_eos,
         "pred_chars": len(response),
         "config": asdict(config),
     }
-
-

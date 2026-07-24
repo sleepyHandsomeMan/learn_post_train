@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "suite_name": "grpo_v7_signal_guard_fix_seed2026_v1",
+  "description": "事后整改实验：复用seed=2026与checkpoint-169起点，只修正signal guard的mixed语义和窗口独立性。",
+  "base_train_config": "post_training_framework/configs/gsm8k_qwen3_0d6b_grpo_v7_causal_base_from169.json",
+  "source_checkpoint": "models/grpo/qwen3_0d6b_grpo_v7_full5759_rewardv2_rollout8_len256_lr5e-6_ppo2_eval100/checkpoint-169",
+  "output_root": "models/grpo/grpo_v7_signal_guard_fix_seed2026_v1",
+  "python_executable": "D:/Anaconda/envs/test3/python.exe",
+  "default_seed": 2026,
+  "confirmation_seeds": [2026],
+  "phases": [
+    {
+      "id": "remediation30",
+      "target_steps": 30,
+      "parent": null,
+      "purpose": "验证整改后的signal guard能否在保留硬安全条件的同时避免mixed单项和重叠窗口误停。"
+    }
+  ],
+  "variants": [
+    {
+      "id": "c0_fresh_control",
+      "tier": "remediation",
+      "factor": "signal_guard_fix_control",
+      "description": "整改guard下的5e-6干净对照，从checkpoint-169只加载LoRA并重置optimizer。",
+      "changed_keys": [],
+      "overrides": {}
+    },
+    {
+      "id": "l1_lr3e6",
+      "tier": "remediation",
+      "factor": "learning_rate",
+      "description": "整改guard下只把学习率从5e-6降到3e-6。",
+      "changed_keys": ["learning_rate"],
+      "overrides": {
+        "learning_rate": 0.000003
+      }
+    }
+  ]
+}

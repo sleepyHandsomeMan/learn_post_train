@@ -48,7 +48,7 @@ yhy/
   dev_tools/
     grpo/                   # GRPO 阶段脚本和启动命令
   docs/
-    grpo_implementation_guide_cn.md
+    40_grpo_rule_reward_implementation_cn.md
 ```
 
 建议命名：

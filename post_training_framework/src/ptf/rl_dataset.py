@@ -29,6 +29,9 @@ class RLPrompt:
     ground_truth: str  # 从 assistant 回答中抽取的答案数字字符串
     prompt_text: str  # chat template 渲染后的 prompt 文本
     prompt_ids: list[int]  # tokenize 后的 prompt input_ids
+    source_index: int | None  # 原始数据索引，便于异常回溯
+    source_bucket: str  # 分桶来源
+    selection_role: str  # 数据选择角色
 
 
 class RLPromptDataset(TorchDataset):
@@ -85,6 +88,9 @@ class RLPromptDataset(TorchDataset):
             ground_truth=ground_truth,
             prompt_text=prompt_text,
             prompt_ids=prompt_ids,
+            source_index=int(row["source_index"]) if "source_index" in row and pd.notna(row["source_index"]) else None,
+            source_bucket=str(row.get("source_bucket", "")),
+            selection_role=str(row.get("selection_role", "")),
         )
 
     def __len__(self) -> int:

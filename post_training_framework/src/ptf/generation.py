@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import time
 from typing import Any
@@ -40,13 +41,71 @@ def load_tokenizer(tokenizer_dir: Path):
     return tokenizer
 
 
+def _resolve_optional_path(raw_path: Any, cfg: ExperimentConfig) -> Path | None:
+    """把 checkpoint/config 中的可选路径解析为绝对路径。"""
+    if raw_path is None:
+        return None
+    text = str(raw_path).strip()
+    if not text:
+        return None
+    path = Path(text).expanduser()
+    if not path.is_absolute():
+        path = cfg.workspace_root / path
+    return path.resolve()
+
+
+def _load_json_if_exists(path: Path) -> dict[str, Any]:
+    """读取可选 JSON 文件；不存在时返回空字典。"""
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def _load_grpo_adapter_model(
+    cfg: ExperimentConfig,
+    adapter_dir: Path,
+    dtype: torch.dtype,
+    device_map: str | None,
+):
+    """按训练链路加载 GRPO LoRA checkpoint: base + SFT merge + GRPO LoRA。"""
+    try:
+        from peft import PeftModel
+    except ImportError as exc:
+        raise ImportError("加载 GRPO LoRA checkpoint 需要安装 peft。") from exc
+
+    state = _load_json_if_exists(adapter_dir / "trainer_state.json")
+    base_model_dir = _resolve_optional_path(state.get("base_model_dir"), cfg) or cfg.path("model.base_model_dir")
+    sft_adapter_dir = _resolve_optional_path(state.get("sft_adapter_dir"), cfg)
+    if sft_adapter_dir is None:
+        sft_adapter_dir = _resolve_optional_path(cfg.get("sft.eval_adapter_dir"), cfg)
+
+    model = AutoModelForCausalLM.from_pretrained(
+        str(base_model_dir),
+        torch_dtype=dtype,
+        device_map=device_map,
+        trust_remote_code=True,
+    )
+
+    if sft_adapter_dir is not None:
+        if not sft_adapter_dir.exists():
+            raise FileNotFoundError(f"GRPO checkpoint 需要的 SFT adapter 不存在: {sft_adapter_dir}")
+        model = PeftModel.from_pretrained(model, str(sft_adapter_dir))
+        model = model.merge_and_unload()
+
+    return PeftModel.from_pretrained(model, str(adapter_dir))
+
+
 def load_generation_model(
     cfg: ExperimentConfig,
     model_kind: str,
     adapter_dir: Path | None = None,
     model_dir: Path | None = None,
 ):
-    """加载 base、LoRA SFT 或已导出的 GRPO HuggingFace 模型。"""
+    """加载 base、LoRA SFT、GRPO LoRA checkpoint 或已导出的 GRPO HuggingFace 模型。"""
     base_model_dir = cfg.path("model.base_model_dir")
     generation_cfg = cfg.get("generation", {})
     dtype = torch.float16 if torch.cuda.is_available() and bool(generation_cfg.get("fp16", True)) else torch.float32
@@ -54,7 +113,14 @@ def load_generation_model(
 
     if model_kind == "grpo":
         if model_dir is None:
-            raise ValueError("加载 GRPO 模型必须提供 model_dir，且该目录应是 merge 后的 HuggingFace 模型目录。")
+            raise ValueError("加载 GRPO 模型必须提供 model_dir。")
+        model_dir = Path(model_dir)
+        if (model_dir / "adapter_config.json").exists() and not (model_dir / "config.json").exists():
+            tokenizer_dir = model_dir if (model_dir / "tokenizer_config.json").exists() else base_model_dir
+            tokenizer = load_tokenizer(tokenizer_dir)
+            model = _load_grpo_adapter_model(cfg, adapter_dir=model_dir, dtype=dtype, device_map=device_map)
+            model.eval()
+            return model, tokenizer
         tokenizer_dir = model_dir
         load_model_dir = model_dir
     else:
@@ -118,6 +184,55 @@ def generate_one(
     return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
 
+def generate_batch(
+    model: Any,
+    tokenizer: Any,
+    questions: list[str],
+    max_new_tokens: int,
+    prompt_mode: str,
+    include_format_instruction: bool,
+    format_instruction: str,
+    enable_thinking: bool | None,
+) -> list[str]:
+    """对一批问题并行生成完整原始输出。"""
+    prompt_texts = [
+        render_generation_prompt(
+            tokenizer=tokenizer,
+            question=question,
+            prompt_mode=prompt_mode,
+            format_instruction=format_instruction,
+            include_format_instruction=include_format_instruction,
+            enable_thinking=enable_thinking,
+        )
+        for question in questions
+    ]
+
+    old_padding_side = tokenizer.padding_side
+    tokenizer.padding_side = "left"
+    try:
+        inputs = tokenizer(prompt_texts, return_tensors="pt", padding=True)
+    finally:
+        tokenizer.padding_side = old_padding_side
+    inputs = {key: value.to(model.device) for key, value in inputs.items()}
+
+    with torch.inference_mode():
+        output_ids = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=build_eos_token_ids(tokenizer),
+            repetition_penalty=1.0,
+        )
+
+    prompt_width = inputs["input_ids"].shape[-1]
+    predictions: list[str] = []
+    for item_ids in output_ids:
+        new_tokens = item_ids[prompt_width:]
+        predictions.append(tokenizer.decode(new_tokens, skip_special_tokens=True).strip())
+    return predictions
+
+
 def evaluate_model(
     cfg: ExperimentConfig,
     model_kind: str,
@@ -127,10 +242,13 @@ def evaluate_model(
     model_dir: Path | None = None,
     run_name: str | None = None,
     output_dir: Path | None = None,
+    eval_batch_size: int = 1,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], Path]:
     """运行推理评估，并保存 JSONL、summary 和 Markdown。"""
     if model_kind not in {"base", "sft", "grpo"}:
         raise ValueError("model_kind 必须是 base、sft 或 grpo。")
+    if eval_batch_size < 1:
+        raise ValueError("eval_batch_size 必须 >= 1。")
 
     eval_file = cfg.path("dataset.eval_file")
     format_instruction = str(cfg.get("prompt.format_instruction", DEFAULT_FORMAT_INSTRUCTION))
@@ -149,37 +267,42 @@ def evaluate_model(
     started = time.time()
     tag = f"{run_name}_max{max_new_tokens}_full"
 
-    for sample in samples:
-        prediction = generate_one(
+    for start in range(0, len(samples), eval_batch_size):
+        batch_samples = samples[start : start + eval_batch_size]
+        predictions = generate_batch(
             model=model,
             tokenizer=tokenizer,
-            question=sample.question,
+            questions=[sample.question for sample in batch_samples],
             max_new_tokens=max_new_tokens,
             prompt_mode=prompt_mode,
             include_format_instruction=include_format_instruction,
             format_instruction=format_instruction,
             enable_thinking=enable_thinking,
         )
-        metric = score_prediction(prediction, sample.gold_answer)
-        row = {
-            "idx": sample.idx,
-            "tag": tag,
-            "model_kind": model_kind,
-            "prompt_mode": prompt_mode,
-            "include_format_instruction": include_format_instruction,
-            "max_new_tokens": max_new_tokens,
-            "question": sample.question,
-            "prediction": prediction,
-            "gold": sample.gold,
-            **metric,
-        }
-        rows.append(row)
-        print(
-            f"[{len(rows)}/{len(samples)}] "
-            f"gold={row['gold_answer']} pred={row['pred_answer']} "
-            f"em={row['exact_match']} format={row['format_ok']} "
-            f"repeat={row['repeat_like']} chars={row['pred_chars']}"
-        )
+        if len(predictions) != len(batch_samples):
+            raise RuntimeError(f"批量生成数量不匹配: samples={len(batch_samples)} predictions={len(predictions)}")
+        for sample, prediction in zip(batch_samples, predictions):
+            metric = score_prediction(prediction, sample.gold_answer)
+            row = {
+                "idx": sample.idx,
+                "tag": tag,
+                "model_kind": model_kind,
+                "prompt_mode": prompt_mode,
+                "include_format_instruction": include_format_instruction,
+                "max_new_tokens": max_new_tokens,
+                "eval_batch_size": eval_batch_size,
+                "question": sample.question,
+                "prediction": prediction,
+                "gold": sample.gold,
+                **metric,
+            }
+            rows.append(row)
+            print(
+                f"[{len(rows)}/{len(samples)}] "
+                f"gold={row['gold_answer']} pred={row['pred_answer']} "
+                f"em={row['exact_match']} format={row['format_ok']} "
+                f"repeat={row['repeat_like']} chars={row['pred_chars']}"
+            )
 
     summary = summarize_rows(rows, tag=tag, max_new_tokens=max_new_tokens)
     summary.update(
@@ -187,6 +310,7 @@ def evaluate_model(
             "model_kind": model_kind,
             "prompt_mode": prompt_mode,
             "include_format_instruction": include_format_instruction,
+            "eval_batch_size": eval_batch_size,
             "eval_file": str(eval_file),
             "seconds": round(time.time() - started, 2),
         }

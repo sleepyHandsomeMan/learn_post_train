@@ -11,6 +11,7 @@
   - generation: 模型加载与推理
   - train_sft: LoRA SFT 训练
   - train_grpo: 自包含 GRPO 训练器
+  - stopping: 训练停止决策、统一调度和结构化留档
   - train_ppo: 自包含 PPO 训练器
   - compare: 模型对比报告
   - grpo_data: RL 数据预览工具
@@ -27,6 +28,7 @@ __all__ = [
     "reward",
     "train_sft",
     "train_grpo",
+    "stopping",
     "train_ppo",
     "compare",
     "grpo_data",

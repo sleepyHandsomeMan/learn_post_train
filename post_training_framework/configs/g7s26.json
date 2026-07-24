@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "suite_name": "g7s26",
+  "description": "seed=2026在整改signal guard下的C0/L1成对50步补充实验。",
+  "base_train_config": "post_training_framework/configs/gsm8k_qwen3_0d6b_grpo_v7_causal_base_from169.json",
+  "source_checkpoint": "models/grpo/qwen3_0d6b_grpo_v7_full5759_rewardv2_rollout8_len256_lr5e-6_ppo2_eval100/checkpoint-169",
+  "output_root": "models/grpo/g7s26",
+  "python_executable": "D:/Anaconda/envs/test3/python.exe",
+  "default_seed": 2026,
+  "confirmation_seeds": [2026],
+  "phases": [
+    {
+      "id": "s30",
+      "target_steps": 30,
+      "parent": null,
+      "purpose": "登记从原始checkpoint-169完成的整改版30步安全轨迹。"
+    },
+    {
+      "id": "c50",
+      "target_steps": 50,
+      "parent": "s30",
+      "purpose": "成对续跑到50步，补齐第三个seed的长期KL、能力与格式证据。"
+    }
+  ],
+  "variants": [
+    {
+      "id": "c0_fresh_control",
+      "tier": "remediation",
+      "factor": "signal_guard_fix_control",
+      "description": "新guard下的5e-6干净对照。",
+      "changed_keys": [],
+      "overrides": {}
+    },
+    {
+      "id": "l1_lr3e6",
+      "tier": "remediation",
+      "factor": "learning_rate",
+      "description": "新guard下只把学习率从5e-6降到3e-6。",
+      "changed_keys": ["learning_rate"],
+      "overrides": {
+        "learning_rate": 0.000003
+      }
+    }
+  ]
+}
